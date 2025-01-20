@@ -3,75 +3,64 @@ package com.crud.services;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import com.crud.entity.Users;
 import com.crud.repo.UsersRepo;
 
-
 @Service
 public class UserService {
-	
-	
-	@Autowired
-	private UsersRepo usersrepo;
-	
-	@Autowired
-	private AuthenticationManager authManager;
-	
-	@Autowired
-	private JwtService jwtService;
-	
-	 public Users register(Users user) {
-		    user.getPassword();
-	        usersrepo.save(user);
-	        return user;
-	    }
-	    
-//	    public String verify(Users user) {
-//	        Authentication authentication = authManager.authenticate(new UsernamePasswordAuthenticationToken(user.getUsername(), user.getPassword()));
-//	   if (authentication.isAuthenticated()) {
-//	         return  jwtService.generateToken(user.getUsername());
-//	        } else {
-//	            return "fail";
-//	        }
-//	    }
-	    
-	    public String verify(Users user) {
-	        Authentication authentication = authManager.authenticate(new UsernamePasswordAuthenticationToken(user.getUsername(), user.getPassword()));
-	        if (authentication.isAuthenticated()) {
-	        	
-	        	// Fetch the user from the database to update the token
-	            Users dbUser = usersrepo.findByusername(user.getUsername());
-	            // Generate the token
-	            String token = jwtService.generateToken(user.getUsername());
 
-	            
+    @Autowired
+    private UsersRepo usersrepo;
 
-	            // Set the token in the user object
-	            dbUser.setToken(token);
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
-	            // Save the user with the token in the database
-	            usersrepo.save(dbUser); 
+    @Autowired
+    private JwtService jwtService;
 
-	            // Return the token
-	            return token;
-	        } else {
-	            return "invalid User";
-	        }
-	    }
-	    
-	   
+    // Register a new user
+    public Users register(Users user) {
+        // Encrypt the user's password before saving
+        String encryptedPassword = passwordEncoder.encode(user.getPassword());
+        user.setPassword(encryptedPassword);
 
-	    
+        // Save the user in the database
+        return usersrepo.save(user);
+    }
 
-		public List<Users> getAllUsers() {
-			// TODO Auto-generated method stub
-			return usersrepo.findAll();
-		}
+    // Verify user credentials
+    public String verify(Users user) {
+        try {
+            // Fetch the user from the database
+            Users dbUser = usersrepo.findByusername(user.getUsername());
+            if (dbUser == null) {
+                return "User not found.";
+            }
 
+            // Validate the password
+            if (!passwordEncoder.matches(user.getPassword(), dbUser.getPassword())) {
+                return "Invalid credentials.";
+            }
+
+            // Generate a JWT token
+            String token = jwtService.generateToken(dbUser.getUsername());
+
+            // Update and save the user with the token
+            dbUser.setToken(token);
+            usersrepo.save(dbUser);
+
+            return token;
+        } catch (Exception ex) {
+            // Handle any unexpected errors gracefully
+            return "An error occurred during verification: " + ex.getMessage();
+        }
+    }
+
+    // Get all users from the database
+    public List<Users> getAllUsers() {
+        return usersrepo.findAll();
+    }
 }
